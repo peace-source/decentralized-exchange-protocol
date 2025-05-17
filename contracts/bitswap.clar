@@ -343,3 +343,62 @@
     )
   )
 )
+
+;; Read-only functions
+
+;; Returns all information about a specific pool
+(define-read-only (get-pool-info (pool-id uint))
+  (map-get? pools pool-id)
+)
+
+;; Returns the amount of LP shares owned by a provider
+(define-read-only (get-provider-shares
+    (pool-id uint)
+    (provider principal)
+  )
+  (map-get? liquidity-providers {
+    pool-id: pool-id,
+    provider: provider,
+  })
+)
+
+;; Calculates the current exchange rate between tokens in a pool
+(define-read-only (get-exchange-rate (pool-id uint))
+  (let ((pool (unwrap! (map-get? pools pool-id) ERR-POOL-NOT-FOUND)))
+    (ok (/ (mul (get reserve-y pool) PRECISION) (get reserve-x pool)))
+  )
+)
+
+;; Administrative functions
+
+;; Updates the protocol fee rate
+(define-public (set-protocol-fee (new-fee uint))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (asserts! (<= new-fee PRECISION) ERR-INVALID-AMOUNT)
+    (var-set protocol-fee-rate new-fee)
+    (ok true)
+  )
+)
+
+;; Temporarily disables trading in a specific pool
+(define-public (pause-pool (pool-id uint))
+  (let ((pool (unwrap! (map-get? pools pool-id) ERR-POOL-NOT-FOUND)))
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    ;; Check if pool exists and is active
+    (asserts! (get active pool) ERR-POOL-NOT-FOUND)
+    ;; Update pool with checked data
+    (ok (map-set pools pool-id (merge pool { active: false })))
+  )
+)
+
+;; Re-enables a previously paused pool
+(define-public (resume-pool (pool-id uint))
+  (let ((pool (unwrap! (map-get? pools pool-id) ERR-POOL-NOT-FOUND)))
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    ;; Check if pool exists and is inactive
+    (asserts! (not (get active pool)) ERR-POOL-NOT-FOUND)
+    ;; Update pool with checked data
+    (ok (map-set pools pool-id (merge pool { active: true })))
+  )
+)
